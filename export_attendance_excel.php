@@ -8,6 +8,17 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once 'config.php';
+require_once 'permissions_helper.php';
+
+$role             = $_SESSION['role'] ?? '';
+$userId           = (int)($_SESSION['user_id'] ?? 0);
+$perms            = loadUserPermissions($pdo, $role, $userId);
+$canExportAttendance = ($role === 'مدير') || ($role === 'مشرف' && !empty($perms['can_view_attendance']));
+
+if (!$canExportAttendance) {
+    header("Location: dashboard.php");
+    exit;
+}
 
 // التحقق من التاريخ المطلوب (افتراض اليوم إن لم يُرسل)
 $date = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date'])
