@@ -24,7 +24,6 @@ $isManager            = ($role === 'مدير');
 $isSupervisor         = ($role === 'مشرف');
 $perms                = loadUserPermissions($pdo, $role, $userId);
 $canAccessAttendance  = $isManager || ($isSupervisor && !empty($perms['can_view_attendance']));
-$canManageAttendance  = $canAccessAttendance;
 
 if (!$canAccessAttendance) {
     header("Location: dashboard.php");
@@ -44,7 +43,7 @@ try {
 } catch (Exception $e) {}
 
 // معالجة نماذج POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageAttendance) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canAccessAttendance) {
     $action = $_POST['action'] ?? '';
     $attendanceCreatedAt = date('Y-m-d H:i:s');
 
@@ -242,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageAttendance) {
     }
 
     // 3) حذف حضور (مشترك أو حصة واحدة) - مسموح للمدير فقط
-    if ($action === 'delete_attendance' && $canManageAttendance) {
+    if ($action === 'delete_attendance' && $canAccessAttendance) {
         $attId = (int)($_POST['attendance_id'] ?? 0);
 
         if ($attId <= 0) {
@@ -653,7 +652,7 @@ try {
                     <th>تاريخ البداية</th>
                     <th>تاريخ النهاية</th>
                     <th>حالة الاشتراك</th>
-                    <?php if ($canManageAttendance): ?>
+                    <?php if ($canAccessAttendance): ?>
                         <th>إجراءات</th>
                     <?php endif; ?>
                 </tr>
@@ -661,7 +660,7 @@ try {
                 <tbody>
                 <?php if (!$attendanceList): ?>
                     <tr>
-                        <td colspan="<?php echo $canManageAttendance ? 23 : 22; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;font-size:18px;padding:18px 0;">
+                        <td colspan="<?php echo $canAccessAttendance ? 23 : 22; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;font-size:18px;padding:18px 0;">
                             لا يوجد حضور مسجل اليوم حتى الآن.
                         </td>
                     </tr>
@@ -729,7 +728,7 @@ try {
                             <td><?php echo htmlspecialchars($row['m_end_date'] ?? ''); ?></td>
                             <td><?php echo htmlspecialchars($row['m_status'] ?? ''); ?></td>
 
-                            <?php if ($canManageAttendance): ?>
+                            <?php if ($canAccessAttendance): ?>
                                 <td>
                                     <form method="post" action=""
                                           onsubmit="return confirm('هل أنت متأكد من حذف هذا الحضور؟');"

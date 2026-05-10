@@ -31,7 +31,9 @@ function loadUserPermissions(PDO $pdo, string $role, int $userId): array
                 }
             }
         }
-    } catch (Exception $e) {}
+    } catch (Exception $e) {
+        // نحتفظ بالقيم الافتراضية حتى لا تتعطل الصفحات إذا تعذر تحميل الصلاحيات.
+    }
 
     return $perms;
 }

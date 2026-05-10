@@ -29,7 +29,6 @@ $isManager          = ($role === 'مدير');
 $isSupervisor       = ($role === 'مشرف');
 $perms              = loadUserPermissions($pdo, $role, $userId);
 $canAccessSettings  = $isManager || ($isSupervisor && !empty($perms['can_view_settings']));
-$canManageSettings  = $canAccessSettings;
 
 if (!$canAccessSettings) {
     header("Location: dashboard.php");
@@ -40,7 +39,7 @@ $errors  = [];
 $success = "";
 
 // معالجة حفظ الإعدادات
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageSettings) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canAccessSettings) {
     $newSiteName = trim($_POST['site_name'] ?? '');
 
     if ($newSiteName === '') {
@@ -442,17 +441,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageSettings) {
                         <label for="site_name">اسم الموقع</label>
                         <input type="text" id="site_name" name="site_name"
                                value="<?php echo htmlspecialchars($siteName); ?>"
-                               <?php echo !$canManageSettings ? 'disabled' : ''; ?>>
+                               <?php echo !$canAccessSettings ? 'disabled' : ''; ?>>
                         <div class="muted">مثال: نظام إدارة الجيم، Gym Admin Panel، ...</div>
                     </div>
 
                     <div class="field">
                         <label for="logo">شعار الموقع (اختياري)</label>
-                        <input type="file" id="logo" name="logo" accept="image/*" <?php echo !$canManageSettings ? 'disabled' : ''; ?>>
+                        <input type="file" id="logo" name="logo" accept="image/*" <?php echo !$canAccessSettings ? 'disabled' : ''; ?>>
                         <div class="muted">يُفضل رفع صورة مربعة PNG أو JPG بحجم أقل من 2MB.</div>
                     </div>
 
-                    <?php if ($canManageSettings): ?>
+                    <?php if ($canAccessSettings): ?>
                         <button type="submit" class="btn-save-main">
                             <span>💾</span>
                             <span>حفظ إعدادات الموقع</span>
