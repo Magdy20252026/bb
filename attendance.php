@@ -111,16 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageAttendance) {
                                         $pdo->rollBack();
                                         $errors[] = "تعذر خصم الدعوة، ربما لا يوجد رصيد دعوات كافٍ.";
                                     } else {
+                                        $attendanceCreatedAt = date('Y-m-d H:i:s');
+
                                         // تسجيل كـ مدعو
                                         $stmt = $pdo->prepare("
                                             INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
-                                            VALUES (:mid, 'مدعو', :n, :ph, :bc, 1, 'حضور باستخدام دعوة', 0, NOW())
+                                            VALUES (:mid, 'مدعو', :n, :ph, :bc, 1, 'حضور باستخدام دعوة', 0, :created_at)
                                         ");
                                         $stmt->execute([
-                                            ':mid' => $memberId,
-                                            ':n'   => $guestName,
-                                            ':ph'  => $guestPhone,
-                                            ':bc'  => $barcode,
+                                            ':mid'        => $memberId,
+                                            ':n'          => $guestName,
+                                            ':ph'         => $guestPhone,
+                                            ':bc'         => $barcode,
+                                            ':created_at' => $attendanceCreatedAt,
                                         ]);
 
                                         $pdo->commit();
@@ -148,16 +151,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageAttendance) {
                                         $pdo->rollBack();
                                         $errors[] = "تعذر خصم التمرينة، ربما لا يوجد رصيد تمرينات كافٍ.";
                                     } else {
+                                        $attendanceCreatedAt = date('Y-m-d H:i:s');
+
                                         // تسجيل الحضور
                                         $stmt = $pdo->prepare("
                                             INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
-                                            VALUES (:mid, 'مشترك', :n, :ph, :bc, 0, NULL, 0, NOW())
+                                            VALUES (:mid, 'مشترك', :n, :ph, :bc, 0, NULL, 0, :created_at)
                                         ");
                                         $stmt->execute([
-                                            ':mid' => $memberId,
-                                            ':n'   => $member['name'],
-                                            ':ph'  => $member['phone'],
-                                            ':bc'  => $member['barcode'],
+                                            ':mid'        => $memberId,
+                                            ':n'          => $member['name'],
+                                            ':ph'         => $member['phone'],
+                                            ':bc'         => $member['barcode'],
+                                            ':created_at' => $attendanceCreatedAt,
                                         ]);
 
                                         $pdo->commit();
@@ -215,18 +221,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManageAttendance) {
 
                 if (empty($errors)) {
                     $remaining = max(0, $required - $paid);
+                    $attendanceCreatedAt = date('Y-m-d H:i:s');
                     // مهم: نكتب "المدفوع=" بهذه الصيغة ليستطيع REGEXP قراءتها
                     $notes = "حصة واحدة: السعر={$totalPrice}, المتبقي_قديم={$oldDebt}, المدفوع={$paid}, المتبقي={$remaining}";
 
                     $stmt = $pdo->prepare("
                         INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
-                        VALUES (NULL, 'حصة_واحدة', :n, :ph, NULL, 0, :nt, :paid, NOW())
+                        VALUES (NULL, 'حصة_واحدة', :n, :ph, NULL, 0, :nt, :paid, :created_at)
                     ");
                     $stmt->execute([
-                        ':n'    => $name,
-                        ':ph'   => $phone,
-                        ':nt'   => $notes,
-                        ':paid' => $paid,
+                        ':n'          => $name,
+                        ':ph'         => $phone,
+                        ':nt'         => $notes,
+                        ':paid'       => $paid,
+                        ':created_at' => $attendanceCreatedAt,
                     ]);
 
                     $success = "تم تسجيل حضور مشترك حصة واحدة بنجاح.";
