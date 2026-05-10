@@ -8,6 +8,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once 'config.php';
+require_once 'permissions_helper.php';
 
 // جلب اسم الموقع
 $siteName = "Gym System";
@@ -20,15 +21,23 @@ try {
 
 $username  = $_SESSION['username'] ?? '';
 $role      = $_SESSION['role'] ?? '';
+$userId    = (int)($_SESSION['user_id'] ?? 0);
 
 /*
  * الصلاحيات:
  * - المدير: إضافة + تعديل + حذف
- * - المشرف: إضافة فقط (لا تعديل ولا حذف)
- * - غير ذلك: عرض فقط بدون إضافة/تعديل/حذف
+ * - المشرف: إذا كانت صفحة المصروفات مسموحة له فله نفس صلاحيات الصفحة
+ * - غير ذلك: لا يدخل الصفحة
  */
-$isManager = ($role === 'مدير');
-$isSupervisor = ($role === 'مشرف');
+$isManager         = ($role === 'مدير');
+$isSupervisor      = ($role === 'مشرف');
+$perms             = loadUserPermissions($pdo, $role, $userId);
+$canAccessExpenses = $isManager || ($isSupervisor && !empty($perms['can_view_expenses']));
+
+if (!$canAccessExpenses) {
+    header("Location: dashboard.php");
+    exit;
+}
 
 $errors  = [];
 $success = "";
@@ -38,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     // إضافة مصروف (مسموح للمدير والمشرف)
-    if ($action === 'add' && ($isManager || $isSupervisor)) {
+    if ($action === 'add' && $canAccessExpenses) {
         $expenseId   = 0; // لا يتم استخدامه في الإضافة
         $expenseDate = trim($_POST['expense_date'] ?? '');
         $item        = trim($_POST['item'] ?? '');
@@ -74,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // تعديل مصروف (مسموح للمدير فقط)
-    if ($action === 'edit' && $isManager) {
+    if ($action === 'edit' && $canAccessExpenses) {
         $expenseId   = (int)($_POST['expense_id'] ?? 0);
         $expenseDate = trim($_POST['expense_date'] ?? '');
         $item        = trim($_POST['item'] ?? '');
@@ -117,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // حذف مصروف (مسموح للمدير فقط)
-    if ($action === 'delete' && $isManager) {
+    if ($action === 'delete' && $canAccessExpenses) {
         $expenseId = (int)($_POST['expense_id'] ?? 0);
         if ($expenseId <= 0) {
             $errors[] = "معرّف المصروف غير صحيح.";
@@ -317,13 +326,7 @@ try {
             </form>
         </div>
 
-        <?php if (!($isManager || $isSupervisor)): ?>
-            <div class="alert alert-error">
-                لا تملك صلاحية تسجيل المصروفات (الصلاحية المطلوبة: مدير أو مشرف).
-            </div>
-        <?php endif; ?>
-
-        <?php if ($isManager || $isSupervisor): ?>
+        <?php if ($canAccessExpenses): ?>
             <!-- نموذج إضافة مصروف (فقط، لا تعديل للمشرف) -->
             <form method="post" action="" id="expenseForm" style="margin-top:10px;">
                 <input type="hidden" name="action" id="formAction" value="add">
@@ -365,7 +368,7 @@ try {
                     <th>البند</th>
                     <th>المبلغ</th>
                     <th>مسجّل بواسطة</th>
-                    <?php if ($isManager): ?>
+                    <?php if ($canAccessExpenses): ?>
                         <th>إجراءات</th>
                     <?php endif; ?>
                 </tr>
@@ -373,7 +376,7 @@ try {
                 <tbody>
                 <?php if (!$expenses): ?>
                     <tr>
-                        <td colspan="<?php echo $isManager ? 6 : 5; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;">
+                        <td colspan="<?php echo $canAccessExpenses ? 6 : 5; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;">
                             لا توجد مصروفات مسجلة لهذا اليوم.
                         </td>
                     </tr>
@@ -389,7 +392,7 @@ try {
                             <td><?php echo htmlspecialchars($ex['item']); ?></td>
                             <td><?php echo number_format($ex['amount'], 2); ?></td>
                             <td><?php echo htmlspecialchars($ex['username'] ?? ''); ?></td>
-                            <?php if ($isManager): ?>
+                            <?php if ($canAccessExpenses): ?>
                                 <td>
                                     <button
                                         type="button"
@@ -413,10 +416,10 @@ try {
                         </tr>
                     <?php endforeach; ?>
                     <tr>
-                        <td colspan="<?php echo $isManager ? 3 : 2; ?>" style="text-align:left;font-weight:900;">
+                        <td colspan="<?php echo $canAccessExpenses ? 3 : 2; ?>" style="text-align:left;font-weight:900;">
                             إجمالي مصروفات اليوم:
                         </td>
-                        <td colspan="<?php echo $isManager ? 3 : 3; ?>" style="font-weight:900;">
+                        <td colspan="<?php echo $canAccessExpenses ? 3 : 3; ?>" style="font-weight:900;">
                             <?php echo number_format($total, 2); ?>
                         </td>
                     </tr>
@@ -446,8 +449,8 @@ try {
         });
     }
 
-    // وظائف التعديل (للمدير فقط)
-    <?php if ($isManager): ?>
+    // وظائف التعديل
+    <?php if ($canAccessExpenses): ?>
     function fillEditForm(id, date, item, amount) {
         const formAction = document.getElementById('formAction');
         const expenseId  = document.getElementById('expenseId');

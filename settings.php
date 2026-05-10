@@ -8,6 +8,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once 'config.php';
+require_once 'permissions_helper.php';
 
 // تحميل الإعدادات الحالية
 $siteName = "Gym System";
@@ -21,15 +22,24 @@ try {
     }
 } catch (Exception $e) {}
 
-$username  = $_SESSION['username'] ?? '';
-$role      = $_SESSION['role'] ?? '';
-$isManager = ($role === 'مدير'); // نفترض أن المدير فقط يغير الإعدادات
+$username           = $_SESSION['username'] ?? '';
+$role               = $_SESSION['role'] ?? '';
+$userId             = (int)($_SESSION['user_id'] ?? 0);
+$isManager          = ($role === 'مدير');
+$isSupervisor       = ($role === 'مشرف');
+$perms              = loadUserPermissions($pdo, $role, $userId);
+$canAccessSettings  = $isManager || ($isSupervisor && !empty($perms['can_view_settings']));
+
+if (!$canAccessSettings) {
+    header("Location: dashboard.php");
+    exit;
+}
 
 $errors  = [];
 $success = "";
 
 // معالجة حفظ الإعدادات
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canAccessSettings) {
     $newSiteName = trim($_POST['site_name'] ?? '');
 
     if ($newSiteName === '') {
@@ -423,12 +433,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
             </div>
         <?php endif; ?>
 
-        <?php if (!$isManager): ?>
-            <div class="disabled-note">
-                لا تملك صلاحية تعديل إعدادات الموقع (الصلاحية المطلوبة: مدير).
-            </div>
-        <?php endif; ?>
-
         <form method="post" action="" enctype="multipart/form-data">
             <div class="grid">
                 <!-- عمود البيانات النصية -->
@@ -437,17 +441,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
                         <label for="site_name">اسم الموقع</label>
                         <input type="text" id="site_name" name="site_name"
                                value="<?php echo htmlspecialchars($siteName); ?>"
-                               <?php echo !$isManager ? 'disabled' : ''; ?>>
+                               <?php echo !$canAccessSettings ? 'disabled' : ''; ?>>
                         <div class="muted">مثال: نظام إدارة الجيم، Gym Admin Panel، ...</div>
                     </div>
 
                     <div class="field">
                         <label for="logo">شعار الموقع (اختياري)</label>
-                        <input type="file" id="logo" name="logo" accept="image/*" <?php echo !$isManager ? 'disabled' : ''; ?>>
+                        <input type="file" id="logo" name="logo" accept="image/*" <?php echo !$canAccessSettings ? 'disabled' : ''; ?>>
                         <div class="muted">يُفضل رفع صورة مربعة PNG أو JPG بحجم أقل من 2MB.</div>
                     </div>
 
-                    <?php if ($isManager): ?>
+                    <?php if ($canAccessSettings): ?>
                         <button type="submit" class="btn-save-main">
                             <span>💾</span>
                             <span>حفظ إعدادات الموقع</span>

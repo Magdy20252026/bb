@@ -7,6 +7,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once 'config.php';
+require_once 'permissions_helper.php';
 
 $siteName = "Gym System";
 try {
@@ -16,9 +17,18 @@ try {
     }
 } catch (Exception $e) {}
 
-$username  = $_SESSION['username'] ?? '';
-$role      = $_SESSION['role'] ?? '';
-$isManager = ($role === 'مدير' || $role === 'مشرف');
+$username             = $_SESSION['username'] ?? '';
+$role                 = $_SESSION['role'] ?? '';
+$userId               = (int)($_SESSION['user_id'] ?? 0);
+$isManager            = ($role === 'مدير');
+$isSupervisor         = ($role === 'مشرف');
+$perms                = loadUserPermissions($pdo, $role, $userId);
+$canAccessAttendance  = $isManager || ($isSupervisor && !empty($perms['can_view_attendance']));
+
+if (!$canAccessAttendance) {
+    header("Location: dashboard.php");
+    exit;
+}
 
 $errors  = [];
 $success = "";
@@ -33,8 +43,9 @@ try {
 } catch (Exception $e) {}
 
 // معالجة نماذج POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canAccessAttendance) {
     $action = $_POST['action'] ?? '';
+    $attendanceCreatedAt = date('Y-m-d H:i:s');
 
     // 1) حضور مشترك عادي بالباركود
     if ($action === 'attendance_member') {
@@ -102,14 +113,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
                                     } else {
                                         // تسجيل كـ مدعو
                                         $stmt = $pdo->prepare("
-                                            INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid)
-                                            VALUES (:mid, 'مدعو', :n, :ph, :bc, 1, 'حضور باستخدام دعوة', 0)
+                                            INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
+                                            VALUES (:mid, 'مدعو', :n, :ph, :bc, 1, 'حضور باستخدام دعوة', 0, :created_at)
                                         ");
                                         $stmt->execute([
-                                            ':mid' => $memberId,
-                                            ':n'   => $guestName,
-                                            ':ph'  => $guestPhone,
-                                            ':bc'  => $barcode,
+                                            ':mid'        => $memberId,
+                                            ':n'          => $guestName,
+                                            ':ph'         => $guestPhone,
+                                            ':bc'         => $barcode,
+                                            ':created_at' => $attendanceCreatedAt,
                                         ]);
 
                                         $pdo->commit();
@@ -139,14 +151,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
                                     } else {
                                         // تسجيل الحضور
                                         $stmt = $pdo->prepare("
-                                            INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid)
-                                            VALUES (:mid, 'مشترك', :n, :ph, :bc, 0, NULL, 0)
+                                            INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
+                                            VALUES (:mid, 'مشترك', :n, :ph, :bc, 0, NULL, 0, :created_at)
                                         ");
                                         $stmt->execute([
-                                            ':mid' => $memberId,
-                                            ':n'   => $member['name'],
-                                            ':ph'  => $member['phone'],
-                                            ':bc'  => $member['barcode'],
+                                            ':mid'        => $memberId,
+                                            ':n'          => $member['name'],
+                                            ':ph'         => $member['phone'],
+                                            ':bc'         => $member['barcode'],
+                                            ':created_at' => $attendanceCreatedAt,
                                         ]);
 
                                         $pdo->commit();
@@ -208,14 +221,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
                     $notes = "حصة واحدة: السعر={$totalPrice}, المتبقي_قديم={$oldDebt}, المدفوع={$paid}, المتبقي={$remaining}";
 
                     $stmt = $pdo->prepare("
-                        INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid)
-                        VALUES (NULL, 'حصة_واحدة', :n, :ph, NULL, 0, :nt, :paid)
+                        INSERT INTO attendance (member_id, type, name, phone, barcode, is_guest, notes, single_paid, created_at)
+                        VALUES (NULL, 'حصة_واحدة', :n, :ph, NULL, 0, :nt, :paid, :created_at)
                     ");
                     $stmt->execute([
-                        ':n'    => $name,
-                        ':ph'   => $phone,
-                        ':nt'   => $notes,
-                        ':paid' => $paid,
+                        ':n'          => $name,
+                        ':ph'         => $phone,
+                        ':nt'         => $notes,
+                        ':paid'       => $paid,
+                        ':created_at' => $attendanceCreatedAt,
                     ]);
 
                     $success = "تم تسجيل حضور مشترك حصة واحدة بنجاح.";
@@ -227,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isManager) {
     }
 
     // 3) حذف حضور (مشترك أو حصة واحدة) - مسموح للمدير فقط
-    if ($action === 'delete_attendance' && $role === 'مدير') {
+    if ($action === 'delete_attendance' && $canAccessAttendance) {
         $attId = (int)($_POST['attendance_id'] ?? 0);
 
         if ($attId <= 0) {
@@ -638,7 +652,7 @@ try {
                     <th>تاريخ البداية</th>
                     <th>تاريخ النهاية</th>
                     <th>حالة الاشتراك</th>
-                    <?php if ($role === 'مدير'): ?>
+                    <?php if ($canAccessAttendance): ?>
                         <th>إجراءات</th>
                     <?php endif; ?>
                 </tr>
@@ -646,7 +660,7 @@ try {
                 <tbody>
                 <?php if (!$attendanceList): ?>
                     <tr>
-                        <td colspan="<?php echo ($role === 'مدير') ? 23 : 22; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;font-size:18px;padding:18px 0;">
+                        <td colspan="<?php echo $canAccessAttendance ? 23 : 22; ?>" style="text-align:center;color:var(--text-muted);font-weight:800;font-size:18px;padding:18px 0;">
                             لا يوجد حضور مسجل اليوم حتى الآن.
                         </td>
                     </tr>
@@ -714,7 +728,7 @@ try {
                             <td><?php echo htmlspecialchars($row['m_end_date'] ?? ''); ?></td>
                             <td><?php echo htmlspecialchars($row['m_status'] ?? ''); ?></td>
 
-                            <?php if ($role === 'مدير'): ?>
+                            <?php if ($canAccessAttendance): ?>
                                 <td>
                                     <form method="post" action=""
                                           onsubmit="return confirm('هل أنت متأكد من حذف هذا الحضور؟');"
